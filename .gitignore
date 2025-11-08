@@ -208,3 +208,6 @@ __marimo__/
 
 #Entorno virutal
 cem_horta_venv/
+
+#Archivos xlsx
+*.xlsx
