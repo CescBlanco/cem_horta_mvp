@@ -9,3 +9,5 @@ uvicorn
 mlflow
 streamlit
 holidays
+ipython
+openpyxl

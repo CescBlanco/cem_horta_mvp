@@ -211,3 +211,7 @@ cem_horta_venv/
 
 #Archivos xlsx
 *.xlsx
+data/abonados_final_pre_modelo.csv
+data/economia_final_pre_modelo.csv
+data/resumen_accesos_pre_modelo.csv
+data/servicios_final.csv

@@ -1,6 +1,6 @@
 import sys, os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from eda_feature_engineering import abonados, accesos, economia, servicios, archivo_final
+from eda_feature_engineering import abonados, accesos, economia, servicios_extra, archivo_final
 
 def main():
     print("Ejecutando análisis de abonados...")
@@ -17,7 +17,7 @@ def main():
     print(df_economia)
    
     print("\nEjecutando análisis de servicios..")
-    df_servicios = servicios.run()
+    df_servicios = servicios_extra.run()
     print(df_servicios)
    
 
