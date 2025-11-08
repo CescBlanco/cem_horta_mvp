@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import re
 
-import holidays
 from IPython.display import display
 import warnings
 warnings.filterwarnings('ignore')
@@ -949,6 +948,7 @@ def preparar_fechas_y_horas(df_accesos: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+import holidays
 
 def calcular_features_accesos(df_accesos: pd.DataFrame) -> pd.DataFrame:
     """
