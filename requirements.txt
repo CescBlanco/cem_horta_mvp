@@ -1,0 +1,10 @@
+pandas
+matplotlib
+seaborn
+numpy
+scikit-learn
+requests
+fastapi
+uvicorn
+mlflow
+streamlit
