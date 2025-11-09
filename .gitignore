@@ -215,3 +215,8 @@ data/abonados_final_pre_modelo.csv
 data/economia_final_pre_modelo.csv
 data/resumen_accesos_pre_modelo.csv
 data/servicios_final.csv
+
+mlruns/
+data/df_validacion_Experimento_v1.csv
+data/df_validacion_Experimento_v2.csv
+data/df_validacion_Experimento_v3.csv
