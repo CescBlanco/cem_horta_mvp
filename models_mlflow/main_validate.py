@@ -22,7 +22,8 @@ Este script configura el entorno de MLflow y evalúa la validación externa de t
 """
 
 # Configuración de la URI para el seguimiento de MLflow
-mlflow.set_tracking_uri("file:./mlruns")
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
+
 
 # Evaluación de validación externa de tres experimentos con diferentes conjuntos de características
 evaluar_validacion_externa("Experimento_v1", FEATURES_1)
