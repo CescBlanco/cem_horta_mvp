@@ -62,20 +62,8 @@ def encontrar_mejor_modelo(experimento_nombre, metric_name):
             modelo_uri= f"runs:/{mejor_modelo_info['run_id']}/model"
             modelo_final= mlflow.sklearn.load_model(modelo_uri)
 
-    return modelo_final, mejor_modelo_info
-
-modelo_final, mejor_modelo_info = encontrar_mejor_modelo(experimento_nombre, metric_name)
-
-print("Modelo cargado correctamente:", modelo_final)
-print("Detalles del mejor modelo:", mejor_modelo_info)
-run_id = mejor_modelo_info['run_id']
-
-app = FastAPI(title="API Abandono flexible")
-
-@app.get("/", summary='Mensaje de bienvenida')
-def read_root():
-    return {"mensaje": "API de predicción de abandono con modelo entrenado en MLflow"}
-
+            run_id = mejor_modelo_info['run_id']
+    return modelo_final, mejor_modelo_info, run_id
 
 # Función utilitaria para cargar el scaler dinámicamente.
 def obtener_scaler_dinamico(client, run_id):
@@ -106,12 +94,6 @@ def obtener_scaler_dinamico(client, run_id):
     local_path = client.download_artifacts(run_id, scaler_path, "./tmp_artifacts")
     scaler = joblib.load(local_path)
     return scaler
-
-scaler = obtener_scaler_dinamico(client, run_id)
-print("Modelo cargado correctamente:", modelo_final)
-print("Detalles del mejor modelo:", mejor_modelo_info)
-print("Detalles del mejor scaler:", scaler)
-
 
 def validar_columnas_esperadas(df, columnas_esperadas):
 
@@ -200,7 +182,8 @@ def guardar_predicciones_api(idpersona, variables, pred, prob, nivel, endpoint, 
         pd.DataFrame([registro]).to_csv(PREDICCIONES_PATH, index=False)
 
 
-
+modelo_final, mejor_modelo_info, run_id = encontrar_mejor_modelo(experimento_nombre, metric_name)
+scaler = obtener_scaler_dinamico(client, run_id)
 # Cargar columnas esperadas.
 with open("data/columnas_modelo3.txt") as f:
     columnas_modelo3 = f.read().splitlines()
@@ -208,6 +191,11 @@ with open("data/columnas_modelo3.txt") as f:
 # Cargar dataset de validación (para endpoint por ID).
 df_validacion = pd.read_csv('data/df_validacion_Experimento_v3.csv')
 
+app = FastAPI(title="API Abandono flexible")
+
+@app.get("/", summary='Mensaje de bienvenida')
+def read_root():
+    return {"mensaje": "API de predicción de abandono con modelo entrenado en MLflow"}
 
 
 # MODELOS DE DATOS
