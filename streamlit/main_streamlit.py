@@ -12,18 +12,8 @@ from mlflow import *
 
 from funciones_streamlit import *
 
-mlflow.set_tracking_uri("sqlite:///mlflow.db")
-
-NAME_EXPERIMENT_3= 'Experimento_v3'   
-NAME_EXPERIMENT_2 = 'Experimento_v2'
-NAME_EXPERIMENT_1 = 'Experimento_v1'
-
-# Obtener todos los experimentos
-experiments = mlflow.get_experiment(NAME_EXPERIMENT_3)
-print(f"Experimentos encontrados: {len(experiments)}")
-
-
 col1, colspace, col3 = st.columns([1,3,1])
+
 
 with col1:
     # Mostrar el logo del gimnasio con un ancho específico de 175 píxeles
@@ -325,7 +315,6 @@ with tabs[1]:
                     st.warning(f"No se encontraron estrategias para el nivel de riesgo: {nivel_riesgo}")
 
 
-
 # ------------------- #
 # TAB 2: Múltiples IDs
 # ------------------- #
@@ -365,7 +354,6 @@ with tabs[2]:
             # Obtener la respuesta de la API para la predicción
             response = obtener_predicciones_api("predecir_abandono_por_ids/", data)
             
-
             # Si no se obtuvo respuesta de la API, mostrar un mensaje de error
             if not response:
                 st.error("⚠️ No se obtuvo respuesta de la API.")
@@ -390,9 +378,6 @@ with tabs[2]:
                     time.sleep(1)
                     # Borramos el mensaje de éxito
                     success_message.empty()
-
-                
-            
 
                     # Asegurarse de que la predicción tenga la estructura correcta
                     id_persona = prediccion.get("IdPersona")
@@ -465,15 +450,18 @@ with tabs[2]:
 # TAB 3: Valoración
 # ------------------- #
 with tabs[3]: 
-        
+        RUN_ID_INFERENCIA_1 = obtener_run_id_inferencias(NAME_EXPERIMENT_1)
+        RUN_ID_INFERENCIA_2 = obtener_run_id_inferencias(NAME_EXPERIMENT_2)
+        RUN_ID_INFERENCIA_3 = obtener_run_id_inferencias(NAME_EXPERIMENT_3)
+
         # Leer los archivos de los diferentes experimentos de inferencia
-        df_archivo_global_exp3, df_archivo_persona_ex3, df_archivo_preds_ex3 = encontrar_csv_inferencias(NAME_EXPERIMENT_3, FOLDER_DESTINO_3, RUN_ID_INF_3)
-        df_archivo_global_exp2, df_archivo_persona_ex2, df_archivo_preds_ex2 = encontrar_csv_inferencias(NAME_EXPERIMENT_2, FOLDER_DESTINO_2, RUN_ID_INF_2)
-        df_archivo_global_exp1, df_archivo_persona_ex1, df_archivo_preds_ex1 = encontrar_csv_inferencias(NAME_EXPERIMENT_1, FOLDER_DESTINO_1, RUN_ID_INF_1)
+        df_archivo_global_exp3, df_archivo_persona_ex3, df_archivo_preds_ex3 = encontrar_csv_inferencias(NAME_EXPERIMENT_3, FOLDER_DESTINO_3, RUN_ID_INFERENCIA_3)
+        df_archivo_global_exp2, df_archivo_persona_ex2, df_archivo_preds_ex2 = encontrar_csv_inferencias(NAME_EXPERIMENT_2, FOLDER_DESTINO_2, RUN_ID_INFERENCIA_2)
+        df_archivo_global_exp1, df_archivo_persona_ex1, df_archivo_preds_ex1 = encontrar_csv_inferencias(NAME_EXPERIMENT_1, FOLDER_DESTINO_1, RUN_ID_INFERENCIA_1)
 
         # Obtener las métricas de rendimiento del modelo para el experimento 3 (AUC, accuracy, F1, recall)
         auc_exp3, accuracy_exp3, f1_exp3, recall_exp3= encontrar_metricas_experimento(NAME_EXPERIMENT_3, metric=METRIC)
-        accuracy, auc, f1, recall= encontrar_metricas_inferencia(RUN_ID_INF_3)
+        accuracy, auc, f1, recall= encontrar_metricas_inferencia(RUN_ID_INFERENCIA_3)
         
         # Crear una opción de radio para que el usuario elija la vista: 'Mostrar modelo entrenado' o 'Mostrar modelo post inferencia'
         view_option = st.radio("Elige la vista:", ("Mostrar modelo entrenado", "Mostrar modelo post inferencia"), horizontal=True)
@@ -482,7 +470,7 @@ with tabs[3]:
         if view_option == 'Mostrar modelo entrenado':
 
             # Leer el archivo CSV con el modelo inicial entrenado (archivo con datos históricos)
-            file_path_inicial =  'mlops_api\data_mlops_api\dataframe_final_abonado.csv'
+            file_path_inicial =  'data\dataframe_final_abonado.csv'
 
             df_modelo_inicial = pd.read_csv(file_path_inicial)
             
@@ -628,7 +616,7 @@ with tabs[3]:
         elif view_option == 'Mostrar modelo post inferencia':
 
             # Ruta al archivo CSV que contiene los datos de validación post-inferencia
-            file_path = 'mlops_api/data_mlops_api/df_validacion_Experimento_v3.csv'
+            file_path = 'data/df_validacion_Experimento_v3.csv'
 
             
             # Leer el archivo CSV de validación para obtener los datos post-inferencia

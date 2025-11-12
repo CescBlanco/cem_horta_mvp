@@ -11,6 +11,8 @@ import seaborn as sns
 
 from mlflow import *
 
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
+
 LOGO_GYM= "streamlit/assets/cem_horta-removebg-preview.png"
 LOGO_AYUNTAMIENTO = "streamlit/assets/LOGO-AJUNTAMENT.png"
 
@@ -31,21 +33,21 @@ NAME_EXPERIMENT_1 = 'Experimento_v1'
 METRIC= 'auc'
 
 
-
-
-
-#RUN IDs para las validaciones del experimento 1 y 2.
-RUN_ID_INF_1= '16987716fc354e1ba24889b529764a57'
-RUN_ID_INF_2= '337dec86874f453bbc6685a653d4c4ee'     
-RUN_ID_INF_3 = "dd26cb042b7a4ca4abd28e64450857f8"  #RunID pegado despuès de encontrarlo en MLFLow IU (experimento3)
-
-
-
 #Ruta donde se guardaran cada artefacto segun el experimento 1 y 2 (no usados)
 FOLDER_DESTINO_1 = 'models_mlflow/inferencia_predicciones_exp1'
 FOLDER_DESTINO_2 = 'models_mlflow/inferencia_predicciones_exp2'
 # Ruta donde se guardarán los artefactos descargados de la inferencia 3 (la importante)
 FOLDER_DESTINO_3= 'models_mlflow/inferencia_predicciones_exp3'
+
+def obtener_run_id_inferencias(NAME_EXPERIMENT):
+
+    # Obtener todos los experimentos
+    exp = mlflow.get_experiment_by_name(NAME_EXPERIMENT)
+    # Obtener todos los runs del experimento
+    runs = mlflow.search_runs(experiment_ids=[exp.experiment_id])
+    run_id_inferencia = runs[runs["tags.type"] == "validacion_externa"].iloc[0]["run_id"]
+    return run_id_inferencia
+
 
 def cargar_columnas_modelo(path: str) -> list:
     """
