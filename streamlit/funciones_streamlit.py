@@ -8,7 +8,7 @@ import os
 import shutil
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+from typing import Dict, List, Tuple, Any
 from mlflow import *
 
 mlflow.set_tracking_uri("sqlite:///mlflow.db")
@@ -1143,7 +1143,7 @@ def generar_explicacion_contexto(df: pd.DataFrame) -> None:
     with col1:
        
         # Mostrar las variables que aumentan el riesgo
-        st.markdown("### 🔺 Aumentan el riesgo")
+        st.markdown("#### 🔺 Aumentan el riesgo")
         for _, row in positivas.iterrows():
             var = row["Variable"]
             imp = round(row["Valor"], 3)
@@ -1152,8 +1152,227 @@ def generar_explicacion_contexto(df: pd.DataFrame) -> None:
     with col2:
         
         # Mostrar las variables que disminuyen el riesgo
-        st.markdown("### 🔻 Disminuyen el riesgo")
+        st.markdown("#### 🔻 Disminuyen el riesgo")
         for _, row in negativas.iterrows():
             var = row["Variable"]
             imp = round(row["Valor"], 3)
             st.markdown(f"**{var}**: {imp}")
+
+
+
+
+# --- Moduladores con interpretacion + acciones concretas ---
+MODULADORES_VARIABLES = {
+    "Edad": {
+        "interpretacion_aumenta": "Edad fuera del rango medio (muy joven o mayor): mayor volatilidad.",
+        "interpretacion_disminuye": "Edad en rango medio: mayor estabilidad.",
+        "accion_si_aumenta": lambda v: f"Personalizar comunicación y simplificar el onboarding. Edad: {int(v)}. Ofrecer sesiones guiadas y contenido paso a paso.",
+        "accion_si_disminuye": lambda v: f"Reforzar con retos y programas multisesión. Edad: {int(v)}. Ofrecer planes trimestrales."
+    },
+    "Sexo_Mujer": {
+        "interpretacion_aumenta": "Segmento femenino muestra riesgo relativo en este cohort.",
+        "interpretacion_disminuye": "Segmento femenino se comporta como factor protector.",
+        "accion_si_aumenta": lambda v: "Promocionar actividades grupales y programas sociales (packs amigas, pilates, zumba).",
+        "accion_si_disminuye": lambda v: "Ofrecer upsell a actividades premium apetecidas por el segmento."
+    },
+    "UsoServiciosExtra": {
+        "interpretacion_aumenta": "No usa servicios extra → bajo engagement.",
+        "interpretacion_disminuye": "Usa servicios extra → alto compromiso.",
+        "accion_si_aumenta": lambda v: "Regalar prueba de 7 días de un servicio extra (nutrición/fisio/clases dirigidas).",
+        "accion_si_disminuye": lambda v: "Ofrecer bono fidelidad para mantener uso de extras."
+    },
+    "ratio_cantidad_2025_2024": {
+        "interpretacion_aumenta": "Ratio < 1: caída interanual del uso.",
+        "interpretacion_disminuye": "Ratio >= 1: crecimiento interanual.",
+        "accion_si_aumenta": lambda v: f"Enviar plan 'Recupera tu nivel' (14 días) y resumen 2024 vs 2025. Ratio: {v:.2f}.",
+        "accion_si_disminuye": lambda v: f"Felicitar progreso y proponer reto de continuidad. Ratio: {v:.2f}."
+    },
+    "Diversidad_servicios_extra": {
+        "interpretacion_aumenta": "Usa pocos servicios extra → bajo anclaje.",
+        "interpretacion_disminuye": "Alta diversidad → mayor anclaje.",
+        "accion_si_aumenta": lambda v: "Invitar a probar 1 servicio complementario gratis.",
+        "accion_si_disminuye": lambda v: "Ofrecer bundle o descuento por número de servicios."
+    },
+    "TienePagos": {
+        "interpretacion_aumenta": "Sin pagos registrados → bajo compromiso financiero.",
+        "interpretacion_disminuye": "Pagos al día → compromiso financiero.",
+        "accion_si_aumenta": lambda v: "Proponer facilidades de pago para convertir.",
+        "accion_si_disminuye": lambda v: "Ofrecer beneficios exclusivos por pago puntual."
+    },
+    "TotalVisitas": {
+        "interpretacion_aumenta": "Total de visitas bajo → bajo hábito.",
+        "interpretacion_disminuye": "Total de visitas alto → hábito consolidado.",
+        "accion_si_aumenta": lambda v: f"Lanzar plan de reactivación con objetivos semanales (visitas objetivo: 2–3/semana). Total visitas: {int(v)}.",
+        "accion_si_disminuye": lambda v: f"Ofrecer reconocimiento (badge) y beneficios por continuidad. Total visitas: {int(v)}."
+    },
+    "DiasActivo": {
+        "interpretacion_aumenta": "Pocos días activos → hábito frágil.",
+        "interpretacion_disminuye": "Muchos días activos → hábito fuerte.",
+        "accion_si_aumenta": lambda v: f"Enviar recordatorios e incentivo a {int(v)} días/mes objetivo.",
+        "accion_si_disminuye": lambda v: f"Proponer retos de progreso acorde a {int(v)} días activos."
+    },
+    "VisitasUlt90": {
+        "interpretacion_aumenta": "Muy baja actividad en últimos 90 días → riesgo inmediato.",
+        "interpretacion_disminuye": "Actividad reciente correcta → riesgo menor.",
+        "accion_si_aumenta": lambda v: f"Campaña inmediata: pase gratuito 48h o sesión 1:1. Visitas 90d: {int(v)}.",
+        "accion_si_disminuye": lambda v: f"Reforzar hábito con mini-reto. Visitas 90d: {int(v)}."
+    },
+    "VisitasUlt180": {
+        "interpretacion_aumenta": "Baja tendencia en 180 días → abandono progresivo.",
+        "interpretacion_disminuye": "Estabilidad en 6 meses → buen predictor.",
+        "accion_si_aumenta": lambda v: f"Enviar resumen de valor y plan 30 días. Visitas 180d: {int(v)}.",
+        "accion_si_disminuye": lambda v: f"Ofrecer continuidad con objetivos a 3 meses. Visitas 180d: {int(v)}."
+    },
+    "TieneAccesos": {
+        "interpretacion_aumenta": "Sin accesos → posible barrera técnica o desinterés.",
+        "interpretacion_disminuye": "Con accesos → mayor probabilidad de uso.",
+        "accion_si_aumenta": lambda v: "Verificar incidencias de acceso y enviar soporte/mensaje con instrucciones.",
+        "accion_si_disminuye": lambda v: "Promocionar features accesibles que aproveche."
+    },
+    "VisitasPrimerTrimestre": {
+        "interpretacion_aumenta": "Inicio de año flojo → señal de arranque pobre.",
+        "interpretacion_disminuye": "Buen arranque → mayor probabilidad de retención.",
+        "accion_si_aumenta": lambda v: f"Campaña de onboarding tardío para recuperar impulso (visitas Q1: {int(v)}).",
+        "accion_si_disminuye": lambda v: f"Promover continuidad con retos trimestrales (visitas Q1: {int(v)})."
+    },
+    "VisitasUltimoTrimestre": {
+        "interpretacion_aumenta": "Último trimestre débil → riesgo reciente.",
+        "interpretacion_disminuye": "Último trimestre estable → indicador positivo.",
+        "accion_si_aumenta": lambda v: f"Acción prioritaria de reactivación: llamada + pase gratis. Visitas último trimestre: {int(v)}.",
+        "accion_si_disminuye": lambda v: f"Recompensa por constancia (visitas último trimestre: {int(v)})."
+    },
+    # Días favoritos — comportamiento binario (True/False)
+    "DiaFav_domingo": {
+        "interpretacion_aumenta": "Patrón de uso irregular respecto al fin de semana.",
+        "interpretacion_disminuye": "Patrón claro de uso en domingo.",
+        "accion_si_aumenta": lambda v: "Promocionar actividades especiales en domingo para recuperar hábito.",
+        "accion_si_disminuye": lambda v: "Reservar plaza o ventaja en actividades del domingo."
+    },
+    "DiaFav_jueves": {
+        "interpretacion_aumenta": "Uso concentrado en jueves sin extensión.",
+        "interpretacion_disminuye": "Hábitos robustos en jueves.",
+        "accion_si_aumenta": lambda v: "Enviar recordatorios miércoles/viernes.",
+        "accion_si_disminuye": lambda v: "Ofrecer reservas preferentes jueves."
+    },
+    "DiaFav_lunes": {
+        "interpretacion_aumenta": "Uso solo lunes → baja continuidad.",
+        "interpretacion_disminuye": "Buen hábito en inicio de semana.",
+        "accion_si_aumenta": lambda v: "Recordatorios y micro-retos de inicio de semana.",
+        "accion_si_disminuye": lambda v: "Refuerzo con metas semanales."
+    },
+    "DiaFav_martes": {
+        "interpretacion_aumenta": "Uso aislado martes → poca diversidad.",
+        "interpretacion_disminuye": "Martes como hábito consolidado.",
+        "accion_si_aumenta": lambda v: "Microrecordatorios en lunes/martes.",
+        "accion_si_disminuye": lambda v: "Ofrecer clases complementarias martes."
+    },
+    "DiaFav_miercoles": {
+        "interpretacion_aumenta": "Mid-week sin continuidad → frágil.",
+        "interpretacion_disminuye": "Miércoles consolidado.",
+        "accion_si_aumenta": lambda v: "Incentivar uso temprano o tarde en miércoles.",
+        "accion_si_disminuye": lambda v: "Promover retos mid-week."
+    },
+    "DiaFav_sabado": {
+        "interpretacion_aumenta": "Solo sábado → uso principalmente social/ocasional.",
+        "interpretacion_disminuye": "Buen uso fin de semana.",
+        "accion_si_aumenta": lambda v: "Proponer actividades recreativas viernes/sábado.",
+        "accion_si_disminuye": lambda v: "Ofrecer eventos sociales."
+    },
+    "DiaFav_viernes": {
+        "interpretacion_aumenta": "Viernes aislado → irregularidad.",
+        "interpretacion_disminuye": "Viernes integrado en rutina.",
+        "accion_si_aumenta": lambda v: "Proponer sesiones previas al fin de semana.",
+        "accion_si_disminuye": lambda v: "Extender ventajas al fin de semana."
+    },
+    # Estaciones
+    "EstFav_invierno": {
+        "interpretacion_aumenta": "Uso estacional (solo invierno) → riesgo fuera de estación.",
+        "interpretacion_disminuye": "Buen uso en invierno → factor protector.",
+        "accion_si_aumenta": lambda v: "Campañas anti-estacionales (verano/primavera).",
+        "accion_si_disminuye": lambda v: "Ofrecer actividades temáticas de invierno."
+    },
+    "EstFav_otono": {
+        "interpretacion_aumenta": "Estacionalidad limitada.",
+        "interpretacion_disminuye": "Otoño como estación de actividad.",
+        "accion_si_aumenta": lambda v: "Incentivos en temporada baja.",
+        "accion_si_disminuye": lambda v: "Campañas temáticas de otoño."
+    },
+    "EstFav_primavera": {
+        "interpretacion_aumenta": "Uso estacional primavera.",
+        "interpretacion_disminuye": "Primavera como estación activa.",
+        "accion_si_aumenta": lambda v: "Promocionar continuidad en verano/invierno.",
+        "accion_si_disminuye": lambda v: "Ofrecer experiencias nuevas de primavera."
+    },
+    "EstFav_verano": {
+        "interpretacion_aumenta": "Uso solo verano → patrón estacional fuerte.",
+        "interpretacion_disminuye": "Uso equilibrado en verano.",
+        "accion_si_aumenta": lambda v: "Reactivación post-verano con ofertas.",
+        "accion_si_disminuye": lambda v: "Campañas premium estivales."
+    }
+}
+
+# --- Helpers / lógica ---
+def nivel_riesgo_from_prob(prob: float) -> str:
+    """Mapea probabilidad a nivel textual."""
+    if prob >= 0.8:
+        return "Muy Alto"
+    if prob >= 0.6:
+        return "Alto"
+    if prob >= 0.4:
+        return "Medio"
+    if prob >= 0.2:
+        return "Bajo"
+    return "Muy Bajo"
+
+def generar_plan_completo(inputs: Dict[str, Any],
+                          shap_values: List[Tuple[str, float]],
+                          prob: float,
+                          top_k: int = 3) -> Dict[str, Any]:
+    """
+    inputs: diccionario con las 24 variables y sus valores (tipos correctos).
+    shap_values: lista de pares (variable, shap_value) OR lista ordenada de mayor importancia.
+    prob: probabilidad de churn (0-1).
+    """
+    nivel = nivel_riesgo_from_prob(prob)
+    plan = {
+        "probabilidad": prob,
+        "nivel_riesgo": nivel,
+        "acciones_base": ESTRATEGIAS_FIDELIZACION[nivel],
+        "perfil": inputs,
+        "drivers": [],
+        "acciones_personalizadas": []
+    }
+
+    # tomamos top_k variables (si shap_values no viene ordenado, ordena por |shap|)
+    shap_sorted = sorted(shap_values, key=lambda x: abs(x[1]), reverse=True)[:top_k]
+
+    for var, shap_val in shap_sorted:
+        valor = inputs.get(var)
+        if var in MODULADORES_VARIABLES:
+            mod = MODULADORES_VARIABLES[var]
+            impacto = "Aumenta riesgo" if shap_val > 0 else "Reduce riesgo"
+            interpretacion = mod["interpretacion_aumenta"] if shap_val > 0 else mod["interpretacion_disminuye"]
+            accion = (mod["accion_si_aumenta"](valor) if shap_val > 0
+                      else mod["accion_si_disminuye"](valor))
+
+            driver_info = {
+                "variable": var,
+                "valor": valor,
+                "shap": float(shap_val),
+                "impacto": impacto,
+                "interpretacion": interpretacion,
+                "accion_recomendada": accion
+            }
+            plan["drivers"].append(driver_info)
+            plan["acciones_personalizadas"].append(accion)
+        else:
+            # fallback genérico
+            plan["drivers"].append({
+                "variable": var,
+                "valor": valor,
+                "shap": float(shap_val),
+                "impacto": "Aumenta riesgo" if shap_val > 0 else "Reduce riesgo",
+                "interpretacion": "Variable sin modulador definido",
+                "accion_recomendada": "Revisión manual sugerida."
+            })
+    return plan

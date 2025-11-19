@@ -11,6 +11,7 @@ import json
 from datetime import datetime
 import random
 
+from streamlit.funciones_streamlit import generar_plan_completo
 # PATH para guardar predicciones.
 PREDICCIONES_PATH = "data/predicciones_api.csv"
 
@@ -480,11 +481,17 @@ def predecir_abandono_por_id(request: IDRequest):
 
     
     # Categorizar el nivel de riesgo
-    nivel = pd.cut([probabilidad], bins=[0, 0.2, 0.4, 0.6, 0.8, 1],
+    nivel = str(pd.cut([probabilidad], bins=[0, 0.2, 0.4, 0.6, 0.8, 1],
                    labels=["Muy Bajo", "Bajo", "Medio", "Alto", "Muy Alto"],
-                   include_lowest=True)[0]
+                   include_lowest=True)[0])
 
     importancia_por_persona_df = obtener_importancia_por_persona(modelo_final, X_scaled, df.columns)
+ # --- Generar plan completo con acciones personalizadas ---
+    shap_values = [(col.replace("_importance",""), importancia_por_persona_df[col].iloc[0]) 
+               for col in importancia_por_persona_df.columns if "_importance" in col]
+    perfil_abonado = fila[columnas_modelo3].iloc[0].to_dict()
+    print(perfil_abonado)
+    plan = generar_plan_completo(perfil_abonado, shap_values, probabilidad, top_k=5)
 
     # Guardar los resultados en CSV
     guardar_predicciones_api(
@@ -495,14 +502,18 @@ def predecir_abandono_por_id(request: IDRequest):
         nivel=nivel,
         endpoint="/predecir_abandono_por_id",
         run_id=mejor_modelo_info['run_id'],  # O el run_id correspondiente
-        importancia_variables= importancia_por_persona_df,
+        importancia_variables= importancia_por_persona_df.to_dict(orient="records")
       
     )
     return {
         "IdPersona": int(id_buscar),
         "ProbabilidadAbandono": round(probabilidad, 3),
         "NivelRiesgo": nivel,
-        "CaracterísticasImportantes": importancia_por_persona_df.to_dict(orient="records")  # Devolvemos los resultados de las importancias
+        "CaracterísticasImportantes": importancia_por_persona_df.to_dict(orient="records"),  # Devolvemos los resultados de las importancias
+        "AccionesBase": plan["acciones_base"],
+        "AccionesPersonalizadas": plan["acciones_personalizadas"],
+        "Drivers": plan["drivers"]
+    
     }
 
 #FUNCIONA
@@ -561,8 +572,15 @@ def predecir_abandono_por_ids(request: IDListRequest):
                        include_lowest=True)[0]
         # Obtener las características más importantes
         importancia_por_persona_df = obtener_importancia_por_persona(modelo_final, X_scaled, df.columns)
-
-                # Guardar los resultados en CSV
+        
+        # --- Generar plan completo con acciones personalizadas ---
+        shap_values = [(col.replace("_importance",""), importancia_por_persona_df[col].iloc[0]) 
+                for col in importancia_por_persona_df.columns if "_importance" in col]
+        perfil_abonado = fila[columnas_modelo3].iloc[0].to_dict()
+        print(perfil_abonado)
+        plan = generar_plan_completo(perfil_abonado, shap_values, probabilidad, top_k=5)
+        
+        # Guardar los resultados en CSV
         guardar_predicciones_api(
             idpersona=idpersona,
             variables=fila.to_dict(orient="records")[0],  # Las variables del ID
@@ -579,7 +597,10 @@ def predecir_abandono_por_ids(request: IDListRequest):
             "IdPersona": idpersona,
             "ProbabilidadAbandono": round(probabilidad, 3),
             "NivelRiesgo": nivel,
-            "CaracterísticasImportantes": importancia_por_persona_df.to_dict(orient="records")  # Devolvemos los resultados de las importancias
+            "CaracterísticasImportantes": importancia_por_persona_df.to_dict(orient="records"),  # Devolvemos los resultados de las importancias
+            "AccionesBase": plan["acciones_base"],
+            "AccionesPersonalizadas": plan["acciones_personalizadas"],
+            "Drivers": plan["drivers"]
         })
 
     return resultados

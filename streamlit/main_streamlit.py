@@ -11,6 +11,7 @@ import seaborn as sns
 from mlflow import *
 
 from funciones_streamlit import *
+from LLM import *
 
 col1, colspace, col3 = st.columns([1,3,1])
 
@@ -228,7 +229,7 @@ with tabs[1]:
              # Usamos st.empty() para crear un contenedor vacío
             success_message = st.empty()
             # Mostrar el mensaje de éxito
-            success_message.success("✅ Predicción obtenida")
+            success_message.success("✅ Predicciones obtenidas y guardadas en la base de datos.")
             # Esperamos un segundo antes de borrar el mensaje
             time.sleep(1)
             # Borramos el mensaje de éxito
@@ -241,7 +242,9 @@ with tabs[1]:
             except json.JSONDecodeError as e:
                 st.error(f"Error al parsear la respuesta JSON: {e}")
                 response = None
-            
+
+            st.markdown(" ")
+
             # Si la respuesta es válida, continuar con el procesamiento de los datos
             if response:
                 # --- 1. Probabilidad de abandono ---
@@ -249,7 +252,7 @@ with tabs[1]:
 
                 # Calcular el color y nivel de riesgo basados en la probabilidad
                 color, nivel= color_con_riesgo(probabilidad)
-            
+
                 # Mostrar la probabilidad de abandono con el color correspondiente
                 st.markdown(
                     f"""
@@ -272,10 +275,6 @@ with tabs[1]:
                     # Llamar a la función que prepara el dataframe de las variables más importantes
                     df_top_filtered = preparar_df_importancias(response)
                     
-                    # Generar el gráfico de las variables más importantes
-                    fig_importancias_abonado = plot_abonado_importancias(df_top_filtered)
-                    st.pyplot(fig_importancias_abonado)
-                 
                     # Generar una frase resumen con las variables que impactan en el riesgo
                     frase_resumen = generar_frase_resumen(df_top_filtered, nivel)
             
@@ -290,8 +289,18 @@ with tabs[1]:
                     # Llamar a la función que genera la explicación del comportamiento del riesgo
                     generar_explicacion_contexto(df_top_filtered)
 
-                st.subheader(" ")
-                st.subheader("Acción de fidelización: ")
+                drivers = response.get("Drivers", [])
+
+                if drivers:
+                    st.subheader("Top 5 --> Variables más influyentes para el abonado:")
+                    for d in drivers:
+                        st.markdown(f"- {d['variable']}: {d['shap']:.3f}")
+                    with st.expander("Ver variables más importantes."):
+                        fig_importancias_abonado = plot_abonado_importancias(df_top_filtered)
+                        st.pyplot(fig_importancias_abonado)
+
+                st.markdown(" ")
+                st.subheader("Acciones de fidelización: ")
                 
                 # --- 4. Estrategias de fidelización ---
                 
@@ -299,21 +308,39 @@ with tabs[1]:
                 id_persona = response.get("IdPersona")
                 nivel_riesgo = response.get("NivelRiesgo")
 
+                
+                # Acciones personalizadas según variables importantes
+                acciones_personalizadas = response.get("AccionesPersonalizadas", [])               
+
+                if acciones_personalizadas:
+                    with st.expander("💡 Acciones personalizadas según variables clave."):
+                        for accion in acciones_personalizadas:
+                            if isinstance(accion, dict):
+                                st.markdown(f"- **Variable**: {accion['variable']}, **Valor**: {accion['valor']}, **Impacto**: {accion['impacto']}, **Acción sugerida**: {accion['accion']}")
+                            else:
+                                st.markdown(f"- {accion}")  # solo mostrar el string
+                
                 # Verificar si el nivel de riesgo tiene estrategias de fidelización definidas
                 if nivel_riesgo in ESTRATEGIAS_FIDELIZACION:
 
                     # Mostrar las estrategias de fidelización en una sección expandible
-                    with st.expander(f"Estrategias de fidelización para el abonado con ID **{id_persona}** (Nivel de Riesgo: {nivel_riesgo})"):
+                    with st.expander(f"Estrategias de fidelización para el abonado con ID **{id_persona}** (Nivel de Riesgo: {nivel_riesgo})."):
                         for estrategia in ESTRATEGIAS_FIDELIZACION[nivel_riesgo]:
-                            st.markdown(estrategia)
-                    
-                    # Mostrar una animación de globos para indicar que se ha completado la acción
-                    st.balloons()
+                            for estrat in estrategia:
+                                # Cada estrategia en un bullet con estilo limpio
+                                st.markdown(f"• {estrat}")
 
+                            # Opcional: un mensaje discreto de información al final
+                            st.info("Estas acciones son recomendaciones generales según el nivel de riesgo del abonado.")
+                            
                 # Si no existen estrategias para el nivel de riesgo, mostrar un mensaje de advertencia
                 else:
                     st.warning(f"No se encontraron estrategias para el nivel de riesgo: {nivel_riesgo}")
-
+            
+            time.sleep(1.5) 
+            # Aplicacion de LLM para generear el Resumen ejecutivo final para el directivo
+            resumen = generar_resumen_gemini(response['ProbabilidadAbandono'], response['NivelRiesgo'],response['Drivers'],response['AccionesPersonalizadas'])
+            tarjeta_resumen(resumen)
 
 # ------------------- #
 # TAB 2: Múltiples IDs
@@ -360,8 +387,21 @@ with tabs[2]:
             
             else:
                 all_success = True 
+                # Crear barra de progreso y contador
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                total_ids = len(response)
+                procesados = 0
+
                 # Procesar cada predicción de forma independiente
                 for prediccion in response:
+                    # Actualizar estado visual
+                    procesados += 1
+                    progress = procesados / total_ids
+
+                    status_text.write(f"Procesando abonado {procesados}/{total_ids}...")
+                    progress_bar.progress(progress)
                     # Verificar si la respuesta contiene algún error para este ID
                     if "error" in prediccion:  # Si encontramos un error en alguno de los abonados
                         st.error(f"⚠️ El ID {prediccion.get('IdPersona')} no es válido: {prediccion.get('error')}")
@@ -387,6 +427,7 @@ with tabs[2]:
                     st.write(f"### Predicción para el abonado con ID {id_persona}")
 
                     # --- 1. Probabilidad de abandono ---
+
                     probabilidad = prediccion.get("ProbabilidadAbandono", 0)  # Obtener la probabilidad de abandono de la predicción
                     color, nivel = color_con_riesgo(probabilidad) # Obtener el color y nivel de riesgo según la probabilidad
                     
@@ -398,49 +439,97 @@ with tabs[2]:
                         """,
                         unsafe_allow_html=True)
                     
-                    # --- 2. Variables más importantes ---
+                  
+                     # Separación para mejorar la presentación
+                    st.markdown(" ")
+                    st.markdown("### Lo que impacta en la probabilidad del abonado:")
+                    st.markdown(" ")
+
+                      # --- 2. Variables más importantes ---
 
                     # Verificar si la respuesta contiene las características importantes
                     if "CaracterísticasImportantes" in prediccion:
 
                         df_top_filtered = preparar_df_importancias(prediccion) # Preparar el dataframe de variables importantes
-                        fig_importancias_abonado = plot_abonado_importancias(df_top_filtered) # Graficar las variables importantes
-                        st.pyplot(fig_importancias_abonado)  # Mostrar el gráfico
-
+                      
                         # Generar un resumen de riesgo basado en las variables
                         frase_resumen = generar_frase_resumen(df_top_filtered, nivel)
                         st.markdown(f"**Resumen del riesgo**: {frase_resumen}")
 
                     # --- 3. Explicación del modelo ---
+
                     # Explicar el comportamiento del riesgo del abonado
                     st.markdown("### Comportamiento del riesgo: ")
                     generar_explicacion_contexto(df_top_filtered) # Llamar a la función que genera la explicación
 
                     # --- 4. Estrategias de fidelización ---
+                    drivers = prediccion.get("Drivers", [])
 
-                    # Verificar si existen estrategias de fidelización para este nivel de riesgo
+                    if drivers:
+                        st.subheader("Top 5 --> Variables más influyentes para el abonado:")
+                        for d in drivers:
+                            st.markdown(f"- {d['variable']}: {d['shap']:.3f}")
+                        with st.expander("Ver variables más importantes."):
+                            fig_importancias_abonado = plot_abonado_importancias(df_top_filtered)
+                            st.pyplot(fig_importancias_abonado)
+                    
+                    st.markdown(" ")
+                    st.subheader("Acciones de fidelización: ")
+                    
+                    # --- 4. Estrategias de fidelización ---
+                    
+                    # Obtener el ID de la persona y el nivel de riesgo desde la respuesta
+                    id_persona = prediccion.get("IdPersona")
+                    nivel_riesgo = prediccion.get("NivelRiesgo")
+
+                    # Acciones personalizadas según variables importantes
+                    acciones_personalizadas = prediccion.get("AccionesPersonalizadas", [])               
+
+                    if acciones_personalizadas:
+                        with st.expander("💡 Acciones personalizadas según variables clave."):
+                            for accion in acciones_personalizadas:
+                                if isinstance(accion, dict):
+                                    st.markdown(f"- **Variable**: {accion['variable']}, **Valor**: {accion['valor']}, **Impacto**: {accion['impacto']}, **Acción sugerida**: {accion['accion']}")
+                                else:
+                                    st.markdown(f"- {accion}")  # solo mostrar el string
+
+                    # Verificar si el nivel de riesgo tiene estrategias de fidelización definidas
                     if nivel_riesgo in ESTRATEGIAS_FIDELIZACION:
-                        
+
                         # Mostrar las estrategias de fidelización en una sección expandible
-                        with st.expander(f"Estrategias de fidelización para el abonado con ID **{id_persona}** (Nivel de Riesgo: {nivel_riesgo})"):
+                        with st.expander(f"Estrategias de fidelización para el abonado con ID **{id_persona}** (Nivel de Riesgo: {nivel_riesgo})."):
                             for estrategia in ESTRATEGIAS_FIDELIZACION[nivel_riesgo]:
-                                st.markdown(estrategia)
-                        
-                        st.balloons() # Mostrar globos como animación
+                                for estrat in estrategia:
+                                    # Cada estrategia en un bullet con estilo limpio
+                                    st.markdown(f"• {estrat}")
+
+                                # Opcional: un mensaje discreto de información al final
+                                st.info("Estas acciones son recomendaciones generales según el nivel de riesgo del abonado.")
+                                
+                    # Si no existen estrategias para el nivel de riesgo, mostrar un mensaje de advertencia
                     else:
-                        
-                        # Si no existen estrategias, mostrar un mensaje de advertencia
                         st.warning(f"No se encontraron estrategias para el nivel de riesgo: {nivel_riesgo}")
+                    
+                    with st.spinner("Generando resumen con IA..."):
+                        # Aplicacion de LLM para generear el Resumen ejecutivo final para el directivo
+                        resumen = generar_resumen_gemini(prediccion['ProbabilidadAbandono'], prediccion['NivelRiesgo'],prediccion['Drivers'],prediccion['AccionesPersonalizadas'])
+                        
+                        tarjeta_resumen(resumen)
+                    time.sleep(random.uniform(0.7, 1.5))
+                
                 # Si todas las predicciones fueron exitosas, mostramos el mensaje de éxito
                 if all_success:
                     # Usamos st.empty() para crear un contenedor vacío
                     success_message = st.empty()
                     # Mostrar el mensaje de éxito
-                    success_message.success("✅ Predicción obtenida")
+                    success_message.success("✅ Predicciones obtenidas y guardadas en la base de datos.")
                     # Esperamos un segundo antes de borrar el mensaje
                     time.sleep(1)
                     # Borramos el mensaje de éxito
                     success_message.empty()
+                # Cuando terminas:
+                status_text.success("Todos los abonados procesados correctamente.")
+                progress_bar.progress(1.0)
 
         except ValueError:
             # Si el usuario introduce un valor no válido (por ejemplo, letras en lugar de números), mostrar un error
@@ -710,6 +799,9 @@ with tabs[3]:
 
             # Mostrar las estrategias según el nivel de riesgo seleccionado
             mostrar_estrategias(nivel_riesgo)
+
+st.write("")
+st.write("")
 
 # Agregar un pie de página con los detalles de contacto
 st.markdown("""<footer style='text-align:center; font-size:12px; color:#888;'>
